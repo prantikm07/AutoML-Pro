@@ -183,11 +183,12 @@ if uploaded_file:
             if categorical_features:
                 encoding_method = st.selectbox("Select Encoding Method", ["Label Encoding", "One-Hot Encoding"])
                 
+                # In the Feature Engineering section under Label Encoding
                 if encoding_method == "Label Encoding":
-                    le = LabelEncoder()
                     for feature in categorical_features:
+                        le = LabelEncoder()
                         df[feature] = le.fit_transform(df[feature])
-                    st.session_state.encoders['label'] = le
+                        st.session_state.encoders[feature] = le  # Store encoder per feature
                     st.success("Label encoding applied successfully!")
                 
                 elif encoding_method == "One-Hot Encoding":
@@ -202,23 +203,23 @@ if uploaded_file:
                 
                 st.session_state.df = df
 
-        # Feature Scaling
-        if st.checkbox("Apply Feature Scaling"):
-            numerical_features = df.select_dtypes(include=['number']).columns.tolist()
-            if numerical_features:
-                scaling_method = st.selectbox("Select Scaling Method", ["Standardization (Z-Score)", "Normalization (Min-Max)"])
+        # # Feature Scaling
+        # if st.checkbox("Apply Feature Scaling"):
+        #     numerical_features = df.select_dtypes(include=['number']).columns.tolist()
+        #     if numerical_features:
+        #         scaling_method = st.selectbox("Select Scaling Method", ["Standardization (Z-Score)", "Normalization (Min-Max)"])
                 
-                scaler = StandardScaler() if scaling_method == "Standardization (Z-Score)" else MinMaxScaler()
-                df[numerical_features] = scaler.fit_transform(df[numerical_features])
-                st.session_state.scaler = scaler
-                st.success("Feature scaling applied successfully!")
-                st.session_state.df = df
+        #         scaler = StandardScaler() if scaling_method == "Standardization (Z-Score)" else MinMaxScaler()
+        #         df[numerical_features] = scaler.fit_transform(df[numerical_features])
+        #         st.session_state.scaler = scaler
+        #         st.success("Feature scaling applied successfully!")
+        #         st.session_state.df = df
 
     # Model Configuration
     with st.expander("🤖 Model Configuration", expanded=True):
         st.subheader("Prepare Features and Target")
-        features = st.multiselect("Select Features (Input Variables):", df.columns)
         target = st.selectbox("Select Target (Output Variable):", df.columns)
+        features = st.multiselect("Select Features (Input Variables):", df.columns.drop(target))
         problem_type = st.radio("Problem Type:", ["Regression", "Classification"], index=0)
         
         if features and target:
@@ -321,75 +322,51 @@ if uploaded_file:
                 except Exception as e:
                     st.error(f"Error training model: {str(e)}")
 
+        st.write(df) 
+
     # Prediction Interface
     if st.session_state.ml_model:
         with st.expander("🔮 Make Predictions", expanded=True):
-#             st.subheader("Live Prediction")
-#             input_data = {}
-            
-#             for feature in features:
-#                 # Handle encoded features
-#                 if 'label' in st.session_state.encoders:
-#                     le = st.session_state.encoders['label']
-#                     if feature in le.classes_:
-#                         input_val = st.selectbox(f"Select {feature}", le.classes_)
-#                         input_data[feature] = le.transform([input_val])[0]
-#                         continue
-                
-#                 # Handle numerical features
-#                 input_data[feature] = st.number_input(f"Enter {feature}", value=df[feature].mean())
-
-#             if st.button("🔮 Predict"):
-#                 try:
-#                     input_df = pd.DataFrame([input_data])
-                    
-#                     # Apply scaling if applicable
-#                     if st.session_state.scaler:
-#                         numerical_features = input_df.select_dtypes(include=['number']).columns
-#                         input_df[numerical_features] = st.session_state.scaler.transform(input_df[numerical_features])
-                    
-#                     # Make prediction
-#                     prediction = st.session_state.ml_model.predict(input_df)
-#                     st.success(f"**Prediction Result:** {prediction[0]}")
-                    
-#                     # Show confidence for classification
-#                     if problem_type == "Classification":
-#                         proba = st.session_state.ml_model.predict_proba(input_df)
-#                         st.write(f"**Confidence:** {proba.max():.2%}")
-
-#                 except Exception as e:
-#                     st.error(f"Prediction error: {str(e)}")
-
-# ##########
-#         if st.session_state.ml_model:
-            st.subheader("Make Prediction")
+            st.subheader("Live Prediction")
             input_data = {}
-            
+
             for feature in features:
+                # Handle encoded categorical features
                 if feature in st.session_state.encoders:
                     encoder = st.session_state.encoders[feature]
-                    category = st.selectbox(f"Select {feature}", encoder.classes_)
-                    input_data[feature] = encoder.transform([category])[0]
+                    input_val = st.selectbox(f"Select {feature}", encoder.classes_)
+                    input_data[feature] = encoder.transform([input_val])[0]
                 else:
-                    input_data[feature] = st.number_input(f"Enter {feature}")
+                    # Handle numerical features
+                    default_val = df[feature].mean() if feature in df.columns else 0.0
+                    input_data[feature] = st.number_input(f"Enter {feature}", value=default_val)
 
-            if st.button("Predict"):
+            if st.button("🔮 Predict"):
                 try:
-                    # Create input dataframe
+                    # Create DataFrame from user inputs
                     input_df = pd.DataFrame([input_data])
-                    
-                    # Apply scaling if applicable
+
+                    # Apply scaling if scaler exists
                     if st.session_state.scaler:
-                        numerical_features = input_df.select_dtypes(include=['number']).columns
-                        input_df[numerical_features] = st.session_state.scaler.transform(input_df[numerical_features])
-                    
+                        num_features = input_df.select_dtypes(include=['number']).columns
+                        input_df[num_features] = st.session_state.scaler.transform(input_df[num_features])
+
                     # Make prediction
                     prediction = st.session_state.ml_model.predict(input_df)
-                    st.success(f"Prediction Result: {prediction[0]}")
+
+                    # Display result
+                    # st.success(f"**Prediction Result:** {prediction[0]:.2f}")
+                    st.success(f"**Prediction Result:** {prediction[0]}")
+
+                    # For classification, display confidence
+                    if problem_type == "Classification":
+                        proba = st.session_state.ml_model.predict_proba(input_df)
+                        st.write(f"**Confidence:** {proba.max():.2%}")
+
                 except Exception as e:
                     st.error(f"Prediction error: {str(e)}")
-##########
+
 
 # Add a footer
 st.markdown("---")
-st.markdown("Built with ❤️ using Streamlit | AutoML Pro v1.0")
+st.markdown("Built with ❤️ by Prantik | AutoML Pro v1.0")
